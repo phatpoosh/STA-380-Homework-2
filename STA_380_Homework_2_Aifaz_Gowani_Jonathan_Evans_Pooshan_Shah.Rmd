@@ -1,0 +1,460 @@
+---
+title: "STA 380 Homework 2"
+author: "Aifaz Gowani, Jonathan Evans, Pooshan Shah"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+---
+## QUESTION 1
+## AIRPORT ANALYSIS 
+
+Question #1: Your task is to create a figure, or set of related figures, that tell an interesting story about flights into and out of Austin. You can annotate the figure and briefly describe it, but strive to make it as stand-alone as possible. It shouldn't need many, many paragraphs to convey its meaning. Rather, the figure should speak for itself as far as possible.
+
+```{r}
+airports <- read.csv("ABIA.csv", header = TRUE)
+attach(airports)
+plot(DepTime,DepDelay, xlab='Dep Time: Hour-minute format',ylab='Dep Delay: minutes',col='indianred1')
+
+```
+First, we wanted to see whether there is any pattern between the time of the day and by how many minutes are the flights are delayed. As you can see there is pattern that emerges where the flights that are closer to midnight, tend to be delayed more than those that are around 8 o'clock in the morning. 
+
+Another interesting thing was the how come there are not really any domestic flights between roughly from 1 to 5 A.M? Upon doing some research I found out that this is the case because the pilots need rest, less taxis are available, less facilities at the airport are available etc. 
+
+An example of the Taxis pattern is also shown below which supports the same pattern: 
+```{r}
+plot(DepTime,TaxiOut,col='orange',xlab= 'Dep Time: Hour-minute format',ylab='Taxi Out')
+```
+
+Second, we wanted to identify which months are the best to fly in terms of less departure delay time and which months tend to have the lowest delays in departure times. From the graph below it could be concluded that the best month is september with the lowest delay time and worst comes out to be july and december. we plotted out the summaries for these dates so it can be compared in numerical terms. 
+
+```{r}
+plot(Month,DepDelay, xlab='Month',ylab='Dep Delay: minutes',col='blue')
+```
+Numerical comparison via summaries is as follows: 
+```{r}
+sept_only = subset(airports, Month==9)
+summary(sept_only$DepDelay)
+dec_only = subset(airports,Month ==12)
+summary(dec_only$DepDelay)
+july_only  =subset(airports, Month==7)
+summary(july_only$DepDelay)
+```
+
+You can clearly see that the median and mean are much lower for the month of september in comparison to the other two months. This makes sense because July and December are holiday months typically therefore there is an increase in the delay time as well . 
+
+Another graph to look at for this comparison is presented below: 
+```{r}
+boxplot(sept_only$DepDelay,(dec_only$DepDelay), xlab ='September                                                                            December',ylab='Dep Delay: minutes',main='Dep Delay comparsion between Sept and Dec',col='red')
+
+
+```
+
+Third, we wanted to explore how destination varies depending on the time of the month. As you can see it in the boxplot presented below, a lot of California and Nevada Locations(Las Vegas) are particularly popular in the summer times. While there patterns which can also be seen such as Ontario during the month of January because people may want to go their for winter break as well. 
+
+```{r}
+plot(Dest,Month, xlab='Destination',ylab='Time of the month',col='green')
+
+```
+
+Fourth, If you hate flight delays, then what are the airports that you should avoid. Surprisingly, Austin's airport came out to be among the worst however this could be the lack of data that was available. Please refer to the graph below for a graphical presentation: 
+
+```{r, warning=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+plot(Dest,log(ArrDelay), xlab='Dest',ylab='Dep Delay: log(minutes)',col='yellow')
+
+```
+
+
+Fifth, we wanted to know what are the possible combinations of airports that you can fly to. In other words, we wnated to identify where are the large airports located and how many airports are located along the east and the west side of the United States. In order to see this, we plotted it on a map using ggmap library. 
+
+```{r}
+library(ggmap)
+US = get_map('United States',zoom=4)
+p =ggmap(US)
+
+d <- read.csv("airports.csv", header = TRUE)
+
+large_only = subset(d, type=='large_airport')
+data = data.frame(x = large_only$longitude_deg,y = large_only$latitude_deg)
+
+# map of all the locations that people really fly to 
+p + geom_point(data=data, aes(x, y),col='red')
+```
+
+
+Lastly, we wanted to identify what are the possible location that you can go to from the Austin's airport. Below is a graphical representation that shows the large capacity of Austin's airport to accomodate many different locations around United States and more. This also points out that because there are so many locations that you can go from Austin, it increases the complexity of time management for the air control crew and as a result cause some delays in the flights at the Austin's airport as we saw in the boxplot before. 
+
+```{r}
+aus_only = subset(airports, Dest=='AUS')
+library(igraph)
+airport <- read.csv("ABIA.csv", stringsAsFactors = FALSE)
+edgelist <- as.matrix(aus_only[c("Origin", "Dest")])
+g <- graph_from_edgelist(edgelist, directed = TRUE)
+g <- simplify(g)
+par(mar=rep(0,4))
+plot.igraph(g, 
+            edge.arrow.size=1,
+            edge.color="orange",
+            edge.curved=TRUE,
+            edge.width=2,
+            vertex.size=3,
+            vertex.color=NA, 
+            vertex.frame.color=NA, 
+            vertex.label=V(g)$name,
+            vertex.label.cex=1.5,
+            layout=layout.fruchterman.reingold
+)
+
+```
+
+
+
+## QUESTION 2
+## Author Attribution
+
+Revisit the Reuters C50 corpus that we explored in class. Your task is to build two separate models (using any combination of tools you see fit) for predicting the author of an article on the basis of that article's textual content. Describe clearly what models you are using, how you constructed features, and so forth. Yes, this is a supervised learning task, but it potentially draws on a lot of what you know about unsupervised learning, since constructing features for a document might involve dimensionality reduction.
+
+In the C50train directory, you have ~50 articles from each of 50 different authors (one author per directory). Use this training data (and this data alone) to build the two models. Then apply your model to the articles by the same authors in the C50test directory, which is about the same size as the training set. How well do your models do at predicting the author identities in this out-of-sample setting? Are there any sets of authors whose articles seem difficult to distinguish from one another? Which model do you prefer?
+
+```{r include=FALSE}
+library(tm) 
+library(magrittr)
+library(slam)
+library(proxy)
+library(e1071)
+library(caret)
+library(randomForest)
+library(dplyr)
+```
+
+```{r error=FALSE, warning=FALSE}
+
+#Train data manipulation
+
+## This wraps another function around readPlain to read
+## plain text documents in English.
+readerPlain = function(fname){
+  readPlain(elem=list(content=readLines(fname)), 
+            id=fname, language='en') }
+
+#will need to change this for other pathways
+file_list = Sys.glob('STA380-master/data/ReutersC50/C50train/*')
+file_all = NULL
+train_authors = NULL
+
+for(file in file_list){
+  author_name = substring(file, first = 40)
+  files_to_add = Sys.glob(paste0(file, '/*.txt'))
+  file_all = append(file_all, files_to_add)
+  #creates vector of just author names
+  train_authors = append(train_authors, rep(author_name, length(files_to_add)))
+}
+
+# Clean up the file names
+# This uses the piping operator from magrittr
+all_docs = lapply(file_all, readerPlain)
+mynames = file_all %>%
+{ strsplit(., '/', fixed=TRUE) } %>%
+{ lapply(., tail, n=2) } %>%
+{ lapply(., paste0, collapse = '') } %>%
+  unlist
+
+# Rename the articles
+names(all_docs) = mynames
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+## once you have documents in a vector, you 
+## create a text mining 'corpus' with: 
+documents_raw = Corpus(VectorSource(all_docs))
+
+## Some pre-processing/tokenization steps.
+## tm_map just maps some function to every document in the corpus
+train_docs = documents_raw
+train_docs = tm_map(train_docs, content_transformer(tolower)) # make everything lowercase
+train_docs = tm_map(train_docs, content_transformer(removeNumbers)) # remove numbers
+train_docs = tm_map(train_docs, content_transformer(removePunctuation)) # remove punctuation
+train_docs = tm_map(train_docs, content_transformer(stripWhitespace)) ## remove excess white-space
+
+## Remove stopwords.
+train_docs = tm_map(train_docs, content_transformer(removeWords), stopwords("en"))
+
+
+## create a doc-term-matrix
+DTM_train = DocumentTermMatrix(train_docs)
+#remove the low 5% of frequency of terms so that we get rid of weird matching on outliers
+DTM_train = removeSparseTerms(DTM_train, 0.95)
+
+
+```
+
+_______________________________________________
+
+Basic statistics about the Train Data:
+```{r warning=FALSE}
+DTM_train # some basic summary statistics
+```
+
+We see here that we've reduced the number of terms down to 801 terms with a sparsity of 86%.
+
+_______________________________________________
+
+```{r error=FALSE, warning=FALSE}
+#Test data manipulation
+
+#will need to change this for other pathways
+file_list_test = Sys.glob('STA380-master/data/ReutersC50/C50test/*')
+file_all_test = NULL
+test_authors = NULL
+
+for(file in file_list_test){
+  author_name_test = substring(file, first = 39)
+  files_to_add_test = Sys.glob(paste0(file, '/*.txt'))
+  file_all_test = append(file_all_test, files_to_add_test)
+  #vector of test authors
+  test_authors = append(test_authors, rep(author_name_test, length(files_to_add_test)))
+}
+
+# Clean up the file names
+# This uses the piping operator from magrittr
+all_docs_test = lapply(file_all_test, readerPlain)
+mynames = file_all_test %>%
+{ strsplit(., '/', fixed=TRUE) } %>%
+{ lapply(., tail, n=2) } %>%
+{ lapply(., paste0, collapse = '') } %>%
+  unlist
+
+# Rename the articles
+names(all_docs_test) = mynames
+names(all_docs_test) = sub('.txt', '', names(all_docs_test))
+
+## once you have documents in a vector, you 
+## create a text mining 'corpus' with: 
+documents_raw = Corpus(VectorSource(all_docs_test))
+
+## Some pre-processing/tokenization steps.
+## tm_map just maps some function to every document in the corpus
+test_docs = documents_raw
+test_docs = tm_map(test_docs, content_transformer(tolower)) # make everything lowercase
+test_docs = tm_map(test_docs, content_transformer(removeNumbers)) # remove numbers
+test_docs = tm_map(test_docs, content_transformer(removePunctuation)) # remove punctuation
+test_docs = tm_map(test_docs, content_transformer(stripWhitespace)) ## remove excess white-space
+
+## Remove stopwords.
+test_docs = tm_map(test_docs, content_transformer(removeWords), stopwords("en"))
+
+
+## create a doc-term-matrix
+DTM_test = DocumentTermMatrix(test_docs)
+#remove the low 5% of frequency of terms so that we get rid of weird matching on outliers
+DTM_test = removeSparseTerms(DTM_test, 0.95)
+```
+
+_______________________________________________
+
+Basic statistics about the Test Data:
+```{r warning=FALSE}
+DTM_test # some basic summary statistics
+```
+
+We see here that we've reduced the number of terms down to 816 terms with a sparsity of 86%.
+
+_______________________________________________
+
+Differences between training and testing set:
+```{r echo=FALSE, warning=FALSE}
+#looks at the data in both test and train and shows the differences in between the sets
+summary(Terms(DTM_test) %in% Terms(DTM_train))
+```
+
+There are 74 terms that are not shared between the sets. From the problem statement, we want to add "pseudo-words" to include unseen terms so that they don't give a 0% probability. 
+
+_______________________________________________
+
+Adding in pseudo-word counts to account for the unseen words:
+```{r warning=FALSE}
+DTM_test2 = DocumentTermMatrix(test_docs,
+                               control = list(dictionary=Terms(DTM_train)))
+summary(Terms(DTM_test2) %in% Terms(DTM_train))
+```
+
+Now all words are shared between the 2 sets of train and test.
+
+_______________________________________________
+
+```{r warning=FALSE}
+DTM_train = as.matrix(DTM_train)
+DTM_train = as.data.frame(DTM_train)
+DTM_train<-cbind(DTM_train,train_authors)
+
+DTM_test2 = as.matrix(DTM_test2)
+DTM_test2 = as.data.frame(DTM_test2)
+DTM_test<-cbind(DTM_test2,test_authors)
+```
+
+Here we transformed the data sets in to matrices and data frames to be used in the modeling algorithms. We then binded the authors of each document to the documents as a way to include the y-variable in the data frame. 
+
+_______________________________________________
+
+Models used: 
+1) Naive Bayes
+2) Random Forest
+
+### Naive Bayes
+
+Accuracy of the Naive Bayes 
+```{r warning=FALSE}
+nB = naiveBayes(as.factor(train_authors)~., data=DTM_train)
+nB_predictions = predict(nB, DTM_test[,-ncol(DTM_test)], type="class")
+
+nB_table <-data.frame(table(DTM_test$test_authors, nB_predictions))
+
+#accuracy of naive bayes
+confusionMatrix(DTM_test$test_authors, nB_predictions)$overall['Accuracy']
+
+```
+
+Naive Bayes gets an accuracy of 28.28%
+
+_______________________________________________
+
+Top 20 Authors who were correctly distinguished:
+```{r warning=FALSE}
+#top 20 authors who were correctly distinguished
+nB_table %>% filter(Var1 == nB_predictions) %>% arrange(desc(Freq)) %>% head(20)
+```
+
+_______________________________________________
+
+Top 20 Authors who were difficult to distinguish from other authors:
+```{r warning=FALSE}
+#top 20 Authors who were difficult to distinguish from other authors
+nB_table %>% filter(Var1 != nB_predictions) %>% arrange(desc(Freq)) %>% head(20)
+```
+
+_______________________________________________
+
+### Random Forest
+
+Accuracy of Random Forest:
+```{r warning=FALSE}
+set.seed(10)
+rf.model= randomForest(x=DTM_train, y = as.factor(train_authors), mtry=4, ntree=300)
+rf.pred= predict(rf.model, data=DTM_test)
+rf.table=as.data.frame(table(rf.pred, train_authors))
+
+rf.confusion.matrix = confusionMatrix(table(rf.pred,test_authors))
+
+#overall accuracy of random forest
+rf.confusion.matrix$overall['Accuracy']
+```
+
+Random Forest gets an accuracy of 76.04%
+
+_______________________________________________
+
+Top 20 authors who were correctly distinguished:
+```{r warning=FALSE}
+#top 20 authors who were correctly distinguished
+rf.table %>% filter(rf.pred == train_authors) %>% arrange(desc(Freq)) %>% head(20)
+```
+
+_______________________________________________
+
+Top 20 Authors who were difficult to distinguish from other authors:
+```{r warning=FALSE}
+#top 20 Authors who were difficult to distinguish from other authors
+rf.table %>% filter(rf.pred != train_authors) %>% arrange(desc(Freq)) %>% head(20)
+```
+
+_______________________________________________
+
+Naive Bayes gets an accuracy of 28.28% and Random Forest gets an accuracy of 76.04% so we prefer to go with Random Forest in predicting authors based on the training set. In both models, we see that authors: Benjamin Kang Lim and Mure Dickie are very difficult to distinguish from each other. 
+Naive Bayes had the hardest time distinguishing between TanEeLyn and Peter Humphrey and Random Forest had the hardest time distinguishing between Benjamin Kang Lim and Mure Dickie. 
+
+
+
+
+
+## QUESTION 3
+## Association Rule Mining
+
+```{r setup, include=FALSE}
+my_favorite_seed = 1234567
+set.seed(my_favorite_seed)
+```
+
+```{r eval=TRUE, results = 'hide',message=FALSE,error=FALSE,warning=FALSE}
+library(tidyverse)
+library(arules)  # has a big ecosystem of packages built around it
+library(arulesViz)
+library(igraph)
+
+#Find the largest basket so we can accurately set the parameters for the dataframe (It's 32)
+max(count.fields("STA380-master/data/groceries.txt", sep = ","))
+
+groceries = read.table("STA380-master/data/groceries.txt",sep=",",fill = TRUE,col.names = paste0("V",seq_len(32)))
+```
+
+```{r,message=FALSE,error=FALSE,warning=FALSE}
+sdftest = data.frame(newcol = c(t(groceries[,c(1:32)])), stringsAsFactors=FALSE)
+
+sdftest$V2 = rep(1:((nrow(sdftest))/32), each = 32)
+
+sdftest = sdftest[!(is.na(sdftest$newcol) | sdftest$newcol==""), ]
+```
+
+We created a stacked dataframe that puts all the items into one column. We then created ID numbers that are associated with each basket. This will be very useful later.
+
+```{r,message=FALSE,error=FALSE,warning=FALSE}
+sdf = data.frame(newcol = c(t(groceries[,c(1:32)])), stringsAsFactors=FALSE)
+
+sdf = sdf[!(is.na(sdf$newcol) | sdf$newcol==""), ]
+
+sdf2 = sort(table(sdf))
+
+barplot(tail(sdf2,20), col=rainbow(10),las=2, cex.names=0.6)
+```
+
+We wanted to get an idea of what the most popular items were. This may help with gathering insights later on when we look at networks and association rules for this data. As you can see, whole milk is the most popular item.
+
+```{r,message=FALSE,error=FALSE,warning=FALSE}
+sdf6 = sdftest
+
+sdf6$V2 = factor(sdf6$V2)
+
+baskets = split(x=sdf6$newcol, f=sdf6$V2)
+
+baskets = lapply(baskets, unique)
+
+basktrans = as(baskets, "transactions")
+
+basketrules = apriori(basktrans, parameter=list(support=.0009, confidence=.003, maxlen=10))
+
+inspect(subset(basketrules, subset=lift > 7 & confidence > 0.8)[1:15])
+
+length(subset(basketrules, subset=confidence == 1))
+
+inspect(subset(basketrules, subset=confidence == 1)[1:5])
+
+plot(basketrules)
+
+inspect(subset(basketrules, support > 0.025)[1:25])
+
+```
+
+We chose our parameters for the Apriori analysis by considering which combination would give us a large number of rules but wouldn't crash our computers. We were able to get over 50,000 rules and they gave us some interesting insights. One interesting finding was that many people go to the grocery store to buy one item. This makes sense because people often go to the store to get an item they forgot for a recipe, beer/beverages for parties, ice cream for lonely nights, snacks to cure the munchies, etc. We also found that there are 64 rules that we can be 100% confident about. For example, if someone buys rice and sugar, we can be confident that they'll buy whole milk. The bar graph earlier showed that whole milk is the most popular item bought by customers. That could explain why whole milk is so prevalent on this 100% confidence list. 
+
+```{r,message=FALSE,error=FALSE,warning=FALSE}
+sub2 = subset(basketrules, subset=confidence > 0.01 & support > 0.005)
+plot(sub2, method='graph')
+```
+
+Here is a basic depiction of the network. It shows how many of the items are single purchases. It also shows that many of the traditional grocery shopping purchases (vegetables, buns, fruit, milk) are clustered together.
+
+
+
+![](BasketTest4.png)
+
+We made a more advanced nodes and edges graph and it shows us that whole milk is at the center. It is connected to many of the items in the graph and this makes sense based on our previous observations. We can also see some interesting clusters being formed. For example, cream cheese, whipped cream, and curd are close to long life bakery products. This means that a store could benefit from grouping these items together. Also, brown bread, frozen vegetables, and soft cheese are very close together in the graph. This means that these items are commonly bought together. We are confident that our analysis can help the store in this dataset decide where to put their items.
